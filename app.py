@@ -1,39 +1,68 @@
-from telethon import TelegramClient, events
-from telethon.sessions import StringSession
 import os
 import asyncio
+from telethon import TelegramClient, events
+from telethon.sessions import StringSession
+from telethon.errors import ChannelInvalidError, ChatAdminRequiredError
 
-# Load all from environment
-API_ID = int(os.getenv('API_ID'))
-API_HASH = os.getenv('API_HASH')
-SESSION_STRING = os.getenv('SESSION_STRING')
+# Load from environment
+API_ID = int(os.getenv("API_ID"))
+API_HASH = os.getenv("API_HASH")
+SESSION_STRING = os.getenv("SESSION_STRING")
+SOURCE_CHANNELS_RAW = os.getenv("SOURCE_CHANNELS", "")
+TARGET_CHANNEL = os.getenv("TARGET_CHANNEL")
 
-SOURCE_CHANNELS = [c.strip() for c in os.getenv('SOURCE_CHANNELS', '').split(',') if c.strip()]
-TARGET_CHANNEL_REF = os.getenv('TARGET_CHANNEL')
+# Parse channels from env (expecting -100xxx or usernames)
+SOURCE_CHANNELS = [c.strip() for c in SOURCE_CHANNELS_RAW.split(',') if c.strip()]
 
-# Use StringSession instead of file-based session
+# Init Telethon client with session string
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
-@client.on(events.NewMessage(chats=SOURCE_CHANNELS))
-async def forward_handler(event):
+async def resolve_channel(client, identifier: str):
+    try:
+        entity = await client.get_entity(identifier)
+        return entity
+    except Exception as e:
+        print(f"[WARNING] Could not resolve {identifier}: {e}")
+        return None
+
+@client.on(events.NewMessage())
+async def handler(event):
+    # Only forward if from valid source
+    if event.chat_id not in valid_source_ids:
+        return
     try:
         await client.send_message(target_channel_entity, event.message)
+        print(f"✅ Forwarded from {event.chat.title}")
     except Exception as e:
-        print(f"Error forwarding message: {e}")
+        print(f"[ERROR] Could not forward message: {e}")
 
 async def main():
-    global target_channel_entity
+    global target_channel_entity, valid_source_ids
     await client.start()
+    print("🔐 Client started.")
 
-    # Resolve the target channel entity (private/public)
-    try:
-        target_channel_entity = await client.get_entity(TARGET_CHANNEL_REF)
-        print(f"Forwarding to: {target_channel_entity.title}")
-    except Exception as e:
-        print(f"Error resolving target channel: {e}")
+    # Step 1: Resolve and validate target channel
+    target_channel_entity = await resolve_channel(client, TARGET_CHANNEL)
+    if not target_channel_entity:
+        print("❌ Target channel not accessible. Exiting.")
         return
 
+    # Step 2: Resolve & filter source channels
+    valid_source_ids = set()
+    for ch in SOURCE_CHANNELS:
+        entity = await resolve_channel(client, ch)
+        if entity:
+            valid_source_ids.add(entity.id)
+            print(f"✅ Listening to source: {entity.title} ({entity.id})")
+        else:
+            print(f"⚠️ Skipping inaccessible source: {ch}")
+
+    if not valid_source_ids:
+        print("❌ No valid source channels. Exiting.")
+        return
+
+    print("🚀 Bot running. Waiting for new messages...")
     await client.run_until_disconnected()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())
