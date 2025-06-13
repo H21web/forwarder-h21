@@ -34,13 +34,18 @@ def run_web():
 
 @user_client.on(events.NewMessage())
 async def forward_handler(event):
+    print(f"📨 New message in: {event.chat_id}")
     if event.chat_id not in valid_source_ids:
+        print("⚠️ Not in valid sources. Ignoring.")
         return
     try:
+        print(f"➡️ Forwarding to target...")
         await bot_client.send_message(target_channel_entity, event.message)
-        print(f"✅ Forwarded message from {event.chat_id}")
     except Exception as e:
         print(f"[ERROR] Failed to forward: {e}")
+
+
+
 
 async def startup():
     global target_channel_entity, valid_source_ids
