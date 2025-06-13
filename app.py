@@ -2,19 +2,19 @@ from telethon import TelegramClient, events
 import os
 import asyncio
 
-# Read from environment or hardcode here (not recommended)
+# Load API credentials from environment
 API_ID = int(os.getenv('API_ID'))
 API_HASH = os.getenv('API_HASH')
 SESSION_NAME = "session"
 
-# Source and target
-SOURCE_CHANNELS = [
-    'https://t.me/c/123456789/0',
-    'https://t.me/c/987654321/0'
-]
+# Load and parse source channels (comma-separated)
+raw_channels = os.getenv('SOURCE_CHANNELS', '')
+SOURCE_CHANNELS = [c.strip() for c in raw_channels.split(',') if c.strip()]
 
-TARGET_CHANNEL = 'https://t.me/your_target_channel'
+# Load target channel
+TARGET_CHANNEL = os.getenv('TARGET_CHANNEL')
 
+# Initialize the client
 client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 
 @client.on(events.NewMessage(chats=SOURCE_CHANNELS))
